@@ -1,0 +1,18 @@
+// Text-only highlighting; source is never interpreted as HTML.
+function codeTokens(source,python){
+ const pattern=python?/(#[^\n]*|"""[\s\S]*?(?:"""|$)|'''[\s\S]*?(?:'''|$)|"(?:\\.|[^"\\\n])*"?|'(?:\\.|[^'\\\n])*'?|\b\d+(?:\.\d+)?(?:e[+-]?\d+)?\b|[A-Za-z_]\w*|\s+|.)/gi:/(\/\/[^\n]*|\/\*[\s\S]*?(?:\*\/|$)|"(?:\\.|[^"\\\n])*"?|'(?:\\.|[^'\\\n])*'?|`(?:\\.|[^`\\])*`?|\b\d+(?:\.\d+)?(?:e[+-]?\d+)?\b|[A-Za-z_$][\w$]*|\s+|.)/gi;
+ const keywords=new Set((python?'def if elif else for while return import from as in is not and or pass break continue class try except finally with lambda global nonlocal yield async await raise':'const let var function if else for while return class new import from export default async await try catch finally throw break continue switch case typeof instanceof delete in of').split(' '));
+ return [...source.matchAll(pattern)].map(m=>{const text=m[0],tail=source.slice(m.index+text.length);let kind='plain';if((python&&text.startsWith('#'))||(!python&&/^\/[/\*]/.test(text)))kind='comment';else if(/^["'`]/.test(text))kind=/^\s*:/.test(tail)?'property':'string';else if(/^\d/.test(text))kind='number';else if(/^(True|False|None|true|false|null|undefined)$/.test(text))kind='boolean';else if(keywords.has(text))kind='keyword';else if(/^(game|react)$/.test(text))kind='api';else if(/^[A-Za-z_$]/.test(text))kind=/^\s*\(/.test(tail)?'function':/^\s*:/.test(tail)||source.slice(0,m.index).trimEnd().endsWith('.')?'property':'variable';else if(/^[+*/%=<>!&|^~-]$/.test(text))kind='operator';return{text,kind}});
+}
+function colorCode(target,source,python){const fragment=document.createDocumentFragment();for(const token of codeTokens(source,python)){const span=document.createElement('span');span.className='syntax-'+token.kind;span.textContent=token.text;fragment.append(span)}target.replaceChildren(fragment)}
+const coloredSource=document.createElement('pre');coloredSource.id='codeHighlight';coloredSource.setAttribute('aria-hidden','true');$('codeSource').before(coloredSource);
+function syncHighlight(){coloredSource.scrollTop=$('codeSource').scrollTop;coloredSource.scrollLeft=$('codeSource').scrollLeft}
+function refreshHighlight(){colorCode(coloredSource,$('codeSource').value+'\n',$('codeLanguage').value==='python');syncHighlight()}
+$('codeSource').classList.add('syntax-input');$('codeSource').addEventListener('input',refreshHighlight);$('codeSource').addEventListener('scroll',syncHighlight);new MutationObserver(refreshHighlight).observe($('codeNumbers'),{childList:true});
+const legend=document.createElement('div');legend.className='code-color-legend';for(const [kind,label] of [['keyword','構文'],['api','game / react'],['function','関数'],['variable','変数'],['property','項目'],['number','数値'],['string','テキスト'],['boolean','真偽・空値'],['comment','コメント']]){const item=document.createElement('span');item.className='syntax-'+kind;item.textContent=label;legend.append(item)}document.querySelector('.code-writing .code-caption').after(legend);
+function colorSuggestions(){for(const button of suggest.children){const strong=button.querySelector('strong');if(strong&&!strong.dataset.colored){strong.dataset.colored='true';colorCode(strong,strong.textContent,$('codeLanguage').value==='python')}}}
+new MutationObserver(colorSuggestions).observe(suggest,{childList:true});
+function colorArgumentFields(){for(const cell of argumentPanel.querySelectorAll('.argument-field'))cell.dataset.valueType=cell.querySelector('select').value}
+argumentPanel.addEventListener('change',colorArgumentFields);
+new MutationObserver(colorArgumentFields).observe(argumentPanel,{childList:true});
+refreshHighlight();
