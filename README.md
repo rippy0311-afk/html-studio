@@ -44,3 +44,5 @@ GitHub Pages: Settings → Pages → Deploy from a branch → main / (root)
 引数アシスト：game.sprite({...})のオブジェクト／Python辞書内でx,y,w,h,vx,vy,gravity,color,image,tag,visibleを補完。game.spriteで定義したplayer等の変数のドット入力でも候補を表示します。game.*／react.*の括弧内にカーソルを置くと引数入力パネルが開き、数値・テキスト・真偽値を入力するだけでコードを自動更新します。引用符・カンマ・PythonのTrue/Falseは自動生成。関数や変数は「式」で指定し、既存の式や独自プロパティは保持します。独自関数・外部ライブラリーの引数フォームは対象外です。
 
 引数の説明：候補一覧と引数入力欄に、各項目の意味・単位・入力例を表示します。同じx/yでも円の中心、四角形の左上、文字のベースラインなど呼び出す関数に合わせて説明。速度・重力にはphysicsの必要性、visibleには描画以外は停止しないことも表示します。
+
+テキスト / HTML欄ではb,strong,i,em,u,s,del,mark,small,sub,sup,br,span,p,div,h1〜h6,ul,ol,li,blockquote,pre,code,hrで書式を編集できます。文字色・背景色・文字サイズなどのインラインstyleに対応。キャンバスとHTML書き出しで同じ書式を使用します。script、イベント属性、iframe、位置指定CSSはこの欄では適用しません。ゲームのコードは専用エディターで編集します。
