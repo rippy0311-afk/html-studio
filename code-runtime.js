@@ -41,6 +41,7 @@ function studioWorker(){
    python=await loadPyodide({indexURL:'https://cdn.jsdelivr.net/pyodide/v0.27.7/full/'});
    python.setStdout({batched:message=>send('log',{message})});
    await python.runPythonAsync('from js import game, react\n');
+   await python.loadPackagesFromImports(data.code);
    await python.runPythonAsync(data.code,{filename:'game.py'});
   }else{new Function('game','react',data.code+'\n//# sourceURL=game.js')(game,react)}
   send('ready',{running});send('frame',{commands});commands=[];

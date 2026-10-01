@@ -31,7 +31,7 @@ function acceptSuggestion(){const c=choices[choiceIndex];if(!c)return;const t=$(
 function paintSuggestions(){suggest.replaceChildren();choices.forEach((c,i)=>{const b=document.createElement('button');b.type='button';b.id='codeChoice'+i;b.setAttribute('role','option');b.setAttribute('aria-selected',String(i===choiceIndex));b.className=i===choiceIndex?'active':'';const strong=document.createElement('strong');strong.textContent=c.name+(c.args===null?'':'('+c.args+')');const description=document.createElement('span');description.textContent=c.description;b.append(strong,description);b.onmousedown=ev=>ev.preventDefault();b.onclick=()=>{choiceIndex=i;acceptSuggestion()};suggest.append(b)});$('codeSource').setAttribute('aria-activedescendant','codeChoice'+choiceIndex);suggest.children[choiceIndex]?.scrollIntoView({block:'nearest'})}
 function showSuggestions(force=false){
  const t=$('codeSource');if(t.selectionStart!==t.selectionEnd){hideSuggestions();return}
- const before=t.value.slice(0,t.selectionStart),props=typeof propertySuggestions==='function'?propertySuggestions(t.value,t.selectionStart):null;
+ const before=t.value.slice(0,t.selectionStart),props=(typeof pythonImportSuggestions==='function'?pythonImportSuggestions(t.value,t.selectionStart):null)|| (typeof propertySuggestions==='function'?propertySuggestions(t.value,t.selectionStart):null);
  if(!props&&typeof scanArguments==='function'){const context=scanArguments(before);if(context.quote||context.comment){hideSuggestions();return}}
  const match=before.match(/\b(game\.mouse|game|react)\.([a-zA-Z]*)$/);let prefix='';
  if(props){choices=props.choices;replaceStart=props.start;replaceEnd=props.end}
