@@ -46,3 +46,20 @@ GitHub Pages: Settings → Pages → Deploy from a branch → main / (root)
 引数の説明：候補一覧と引数入力欄に、各項目の意味・単位・入力例を表示します。同じx/yでも円の中心、四角形の左上、文字のベースラインなど呼び出す関数に合わせて説明。速度・重力にはphysicsの必要性、visibleには描画以外は停止しないことも表示します。
 
 テキスト / HTML欄ではb,strong,i,em,u,s,del,mark,small,sub,sup,br,span,p,div,h1〜h6,ul,ol,li,blockquote,pre,code,hrで書式を編集できます。文字色・背景色・文字サイズなどのインラインstyleに対応。キャンバスとHTML書き出しで同じ書式を使用します。script、イベント属性、iframe、位置指定CSSはこの欄では適用しません。ゲームのコードは専用エディターで編集します。
+
+## Cloud project storage
+
+Projects and exported HTML are saved in Supabase `studio_projects`. The page remains on GitHub Pages. `cloud-config.js` contains only the browser-safe publishable key; never put a secret/service-role key there.
+
+- Sign up / sign in from 保存した作品 (HTML Studio accounts are separate from the Supabase dashboard account).
+- The first クラウドに保存 creates a private project; later edits autosave after 1.2 seconds.
+- Open a saved project on another device using the same HTML Studio account.
+- Updates match the last known revision. A conflicting write is rejected; 別の作品として保存 preserves the current draft.
+- Unsaved changes prompt before leaving. File backup/import and HTML download remain available.
+- Current email delivery uses Supabase's default SMTP: new-user confirmation email is restricted to addresses belonging to the project's organization. Configure custom SMTP before opening signups to arbitrary addresses. Email confirmation stays enabled.
+- Project reference: bbgahsmqhijjsvnbfchi. Site URL: https://rippy0311-afk.github.io/html-studio/
+- Vendor SDK: @supabase/supabase-js 2.57.4, MIT license in vendor/supabase-LICENSE.txt.
+
+Validation: `node tests/cloud-store.cjs`. A transaction rolled back in the live SQL editor verified owner save/read/update, revision increment, stale-write rejection, cross-owner read/update/insert denial, and anonymous privilege denial. Browser UI tests used a local mock to verify reload restore, listing, cross-tab conflicts, and save-as-copy. Actual user email confirmation/sign-in requires the user to register their own account; it has not been claimed as tested.
+
+Docs: https://supabase.com/docs/guides/auth/auth-smtp and https://supabase.com/docs/guides/database/postgres/row-level-security
