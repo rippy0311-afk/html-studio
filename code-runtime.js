@@ -1,11 +1,17 @@
 // Worker-isolated user programs. No access to the editor DOM or its storage.
 function studioWorker(){
+ const inputValues=Object.create(null),inputCallbacks=Object.create(null);
+ function setInputValue(id,value,notify=true){id=String(id);value=String(value);const changed=inputValues[id]!==value;inputValues[id]=value;if(notify&&changed&&inputCallbacks[id])inputCallbacks[id](value);return value}
  let commands=[],running=false,update=null,draw=null,click=null,keyCallback=null,keys={},pressed={},pointer={x:0,y:0,down:false},entities=[],buttons={},events={},timers=[],elapsed=0,score=0,scene='',assets=0,particles=[];
  const keep=f=>{if(!f?.copy)return f;const retained=f.copy();return (...args)=>retained(...args)},plain=o=>o?.toJs?o.toJs({dict_converter:Object.fromEntries}):o;
  const send=(type,data={})=>postMessage({type,...data});
  function error(e){running=false;const detail=String(e.stack||e);const py=[...detail.matchAll(/File "game\.py", line (\d+)/g)];const js=detail.match(/game\.js:(\d+):(\d+)/);send('error',{message:py.length?detail.trim().split('\n').at(-1):String(e.message||e),detail,line:py.length?Number(py.at(-1)[1]):js?Math.max(1,Number(js[1])-2):null})}
  const command=(op,...args)=>{if(commands.length<10000)commands.push([op,...args])};
  const game={width:800,height:500,dt:0,time:0,mouse:pointer,
+ input:(id,label='',value='')=>{id=String(id);if(!Object.hasOwn(inputValues,id))setInputValue(id,value,false);send('field',{id,label:String(label||id),value:inputValues[id]});return id},
+ getInput:id=>String(inputValues[String(id)]??''),
+ setInput:(id,value)=>{value=setInputValue(id,value);send('fieldValue',{id:String(id),value})},
+ onInput:(id,callback)=>{inputCallbacks[String(id)]=keep(callback)},
  clear:(color='#151b32')=>command('clear',color),rect:(x,y,w,h,color='#8cf0cf')=>command('rect',x,y,w,h,color),circle:(x,y,r,color='#ffd36b')=>command('circle',x,y,r,color),
  line:(x,y,x2,y2,color='#fff',width=2)=>command('line',x,y,x2,y2,color,width),text:(value,x,y,size=24,color='#fff')=>command('text',String(value),x,y,size,color),
  image:(url,x,y,w,h)=>command('image',String(url),x,y,w,h),background:(color)=>game.clear(color),
@@ -34,7 +40,7 @@ function studioWorker(){
  const react={start:(id)=>{if(id){send('control',{action:'start',target:String(id)});return}running=true;send('status',{message:'実行中'})},stop:(id)=>{if(id){send('control',{action:'stop',target:String(id)});return}running=false;send('status',{message:'停止中'})},on:(name,f)=>events[name]=keep(f),emit:name=>{if(events[name])events[name]()},isRunning:()=>running};
  self.game=game;self.react=react;
  let python=null,busy=false;
- async function init(data){game.width=data.width;game.height=data.height;running=true;try{
+ async function init(data){game.width=data.width;game.height=data.height;for(const [id,value] of Object.entries(data.inputValues||{}))setInputValue(id,value,false);running=true;try{
   if(data.language==='python'){
    send('loading',{message:'Pythonを準備中（初回は時間がかかります）'});
    importScripts('https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.js');
@@ -48,6 +54,7 @@ function studioWorker(){
  }catch(e){error(e)}}
  self.onmessage=async({data})=>{try{
   if(data.type==='init'){await init(data);return}
+  if(data.type==='fieldValue'){setInputValue(data.id,data.value);send('frame',{commands});commands=[];return}
   if(data.type==='input'){for(const k of Object.keys(data.keys))if(data.keys[k]&&!keys[k]){pressed[k]=true;if(keyCallback)keyCallback(k)}keys=data.keys;Object.assign(pointer,data.pointer);return}
   if(data.type==='click'){Object.assign(pointer,data.pointer);if(click)click(pointer.x,pointer.y);return}
   if(data.type==='button'){if(buttons[data.id])buttons[data.id]();send('frame',{commands});commands=[];return}
@@ -60,13 +67,16 @@ function studioWorker(){
 }
 
 function studioPlayer(config,workerSource){
+ const fields=new Map();
  const canvas=document.querySelector('canvas'),ctx=canvas.getContext('2d'),status=document.querySelector('#runtimeStatus'),controls=document.querySelector('#runtimeButtons');
  canvas.width=config.width;canvas.height=config.height;let worker,blobUrl,timeout,watchdog,pending=false,ready=false,last=performance.now(),keys={},pointer={x:0,y:0,down:false},images=new Map(),audio;
  const report=data=>{parent.postMessage({studioCode:true,token:config.token,...data},'*');if(data.message)status.textContent=data.message};
  function stop(){clearTimeout(timeout);clearTimeout(watchdog);if(worker)worker.terminate();worker=null;ready=false;if(blobUrl)URL.revokeObjectURL(blobUrl);pending=false}
- function launch(){stop();controls.replaceChildren();ctx.clearRect(0,0,canvas.width,canvas.height);blobUrl=URL.createObjectURL(new Blob(['('+workerSource+')()'],{type:'text/javascript'}));worker=new Worker(blobUrl);report({type:'status',message:'準備中'});
+ function launch(){stop();controls.replaceChildren();fields.clear();ctx.clearRect(0,0,canvas.width,canvas.height);blobUrl=URL.createObjectURL(new Blob(['('+workerSource+')()'],{type:'text/javascript'}));worker=new Worker(blobUrl);report({type:'status',message:'準備中'});
   timeout=setTimeout(()=>{stop();report({type:'error',message:'実行が完了しませんでした。無限ループ、またはPythonの読み込みを確認してください。',line:null})},config.language==='python'?90000:2500);
   worker.onmessage=({data})=>{
+   if(data.type==='field'){let field=fields.get(data.id);if(!field){const label=document.createElement('label'),caption=document.createElement('span'),input=document.createElement('input');input.type='text';input.dataset.gameInput=data.id;label.append(caption,input);controls.append(label);field={input,caption};fields.set(data.id,field);input.oninput=()=>{worker?.postMessage({type:'fieldValue',id:data.id,value:input.value});report({type:'fieldValue',id:data.id,value:input.value})}}field.caption.textContent=data.label;field.input.setAttribute('aria-label',data.label);field.input.value=data.value;return}
+   if(data.type==='fieldValue'){const field=fields.get(data.id);if(field)field.input.value=data.value;report(data);return}
    if(data.type==='ready'){ready=true;clearTimeout(timeout);pending=false;last=performance.now();report({type:'ready',message:data.running?'実行中':'停止中'});return}
    if(data.type==='alive'){pending=false;clearTimeout(watchdog);return}
    if(data.type==='frame'){render(data.commands);return}
@@ -80,21 +90,26 @@ function studioPlayer(config,workerSource){
  function render(commands){for(const [op,...a] of commands){try{switch(op){case'clear':ctx.fillStyle=a[0];ctx.fillRect(0,0,canvas.width,canvas.height);break;case'rect':ctx.fillStyle=a[4];ctx.fillRect(...a.slice(0,4));break;case'circle':ctx.fillStyle=a[3];ctx.beginPath();ctx.arc(a[0],a[1],Math.max(0,a[2]),0,Math.PI*2);ctx.fill();break;case'line':ctx.strokeStyle=a[4];ctx.lineWidth=a[5];ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(a[2],a[3]);ctx.stroke();break;case'text':ctx.fillStyle=a[4];ctx.font=a[3]+'px system-ui';ctx.fillText(a[0],a[1],a[2]);break;case'image':{const url=a[0];if(!/^(https?:|data:image\/(png|jpeg|webp|gif);base64,)/i.test(url))break;let img=images.get(url);if(!img){img=new Image();img.src=url;images.set(url,img)}if(img.complete&&img.naturalWidth)ctx.drawImage(img,...a.slice(1));break}}}catch(e){report({type:'error',message:'描画エラー: '+e.message,line:null})}}}
  function input(){worker?.postMessage({type:'input',keys,pointer})}
  canvas.onpointerdown=e=>{unlockAudio();canvas.focus();canvas.setPointerCapture(e.pointerId);const r=canvas.getBoundingClientRect();pointer={x:(e.clientX-r.left)*canvas.width/r.width,y:(e.clientY-r.top)*canvas.height/r.height,down:true};input();worker?.postMessage({type:'click',pointer})};canvas.onpointermove=e=>{const r=canvas.getBoundingClientRect();pointer.x=(e.clientX-r.left)*canvas.width/r.width;pointer.y=(e.clientY-r.top)*canvas.height/r.height;input()};canvas.onpointerup=canvas.onpointercancel=()=>{pointer.down=false;input()};
- canvas.onkeydown=e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(e.key))e.preventDefault();keys[e.key]=true;input()};canvas.onkeyup=e=>{keys[e.key]=false;input()};window.onblur=()=>{keys={};pointer.down=false;input()};
+ canvas.onkeydown=e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(e.key))e.preventDefault();keys[e.key]=true;input()};canvas.onkeyup=e=>{keys[e.key]=false;input()};canvas.onblur=()=>{keys={};input()};window.onblur=()=>{keys={};pointer.down=false;input()};
  document.querySelector('#runtimeStart').onclick=()=>launch();document.querySelector('#runtimeStop').onclick=()=>{stop();report({type:'status',message:'停止中'})};
  window.addEventListener('message',e=>{if(e.source!==parent||!e.data?.studioAction)return;if(e.data.target&&e.data.target!==config.programId)return;worker?.postMessage({type:'action',action:e.data.action,name:e.data.name})});
+ window.addEventListener('message',e=>{if(e.source!==parent||!e.data?.studioField)return;const id=String(e.data.id),value=String(e.data.value);config.inputValues??={};Object.defineProperty(config.inputValues,id,{value,writable:true,enumerable:true,configurable:true});const field=fields.get(id);if(field)field.input.value=value;worker?.postMessage({type:'fieldValue',id,value})});
  function frame(now){if(worker&&ready&&!pending){pending=true;worker.postMessage({type:'tick',dt:(now-last)/1000});watchdog=setTimeout(()=>{stop();report({type:'error',message:'処理が2秒以上応答しません。whileループなどを確認してください。',line:null})},2500)}last=now;requestAnimationFrame(frame)}
  window.addEventListener('pagehide',stop);launch();requestAnimationFrame(frame);
 }
 
-function codeDocument(e,token=''){
- const config={code:e.code||'',language:e.language==='python'?'python':'javascript',programId:e.programId||'game1',width:800,height:500,token};
+function codeDocument(e,token='',inputValues={}){
+ const config={code:e.code||'',language:e.language==='python'?'python':'javascript',programId:e.programId||'game1',width:800,height:500,token,inputValues};
  const json=JSON.stringify(config).replace(/</g,'\\u003c');
- return '<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#111629;color:#eef;font:14px system-ui}header{display:flex;gap:8px;align-items:center;padding:8px;flex-wrap:wrap}button{padding:7px 12px;border:0;border-radius:5px;cursor:pointer}#runtimeStatus{font-size:12px;flex:1}canvas{display:block;width:100%;height:auto;touch-action:none}#runtimeButtons{display:flex;gap:8px;padding:8px;flex-wrap:wrap}</style><header><button id="runtimeStart">再実行</button><button id="runtimeStop">停止</button><span id="runtimeStatus">準備中</span></header><canvas tabindex="0" aria-label="コードゲーム"></canvas><div id="runtimeButtons"></div><script>('+studioPlayer.toString()+')('+json+','+JSON.stringify(studioWorker.toString()).replace(/</g,'\\u003c')+');<\/script></html>';
+ return '<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#111629;color:#eef;font:14px system-ui}header{display:flex;gap:8px;align-items:center;padding:8px;flex-wrap:wrap}button{padding:7px 12px;border:0;border-radius:5px;cursor:pointer}#runtimeStatus{font-size:12px;flex:1}canvas{display:block;width:100%;height:auto;touch-action:none}#runtimeButtons label{display:flex;flex-direction:column;gap:4px}#runtimeButtons input{font:inherit;padding:8px;border:1px solid #aaa;border-radius:5px;max-width:100%;box-sizing:border-box}#runtimeButtons{display:flex;gap:8px;padding:8px;flex-wrap:wrap}</style><header><button id="runtimeStart">再実行</button><button id="runtimeStop">停止</button><span id="runtimeStatus">準備中</span></header><canvas tabindex="0" aria-label="コードゲーム"></canvas><div id="runtimeButtons"></div><script>('+studioPlayer.toString()+')('+json+','+JSON.stringify(studioWorker.toString()).replace(/</g,'\\u003c')+');<\/script></html>';
 }
 
 function routePrograms(){
+ const inputs=[...document.querySelectorAll('[data-studio-input]')],values=Object.create(null);window.studioInputs=values;
+ function field(id,value,source){values[id]=String(value);for(const input of inputs)if(input.dataset.studioInput===id&&input.value!==values[id])input.value=values[id];for(const frame of frames)if(frame.contentWindow!==source)frame.contentWindow.postMessage({studioField:true,id,value:values[id]},'*')}
  const frames=[...document.querySelectorAll('.code-game-frame')];
+ for(const input of inputs){values[input.dataset.studioInput]=input.value;input.addEventListener('input',()=>field(input.dataset.studioInput,input.value))}
+ window.addEventListener('message',e=>{if(!frames.some(f=>f.contentWindow===e.source)||!e.data?.studioCode)return;if(e.data.type==='fieldValue')field(String(e.data.id),String(e.data.value),e.source);if(e.data.type==='ready')for(const [id,value] of Object.entries(values))e.source.postMessage({studioField:true,id,value},'*')});
  function route(action,target,name){for(const frame of frames)frame.contentWindow.postMessage({studioAction:true,action,target,name},'*')}
  document.querySelectorAll('[data-studio-action]').forEach(button=>button.addEventListener('click',()=>{const action=button.dataset.studioAction,target=button.dataset.studioTarget;route(action,action==='event'?'':target,action==='event'?target:'')}));
  window.addEventListener('message',e=>{if(!frames.some(f=>f.contentWindow===e.source)||!e.data?.studioCode||e.data.type!=='control')return;if(['start','stop'].includes(e.data.action))route(e.data.action,String(e.data.target),'')});

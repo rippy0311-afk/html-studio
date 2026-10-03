@@ -1,6 +1,7 @@
 const completions=[
  ['clear','color','#151b32','背景を塗る'],['background','color','#151b32','背景色'],['rect','x,y,w,h,color','40,40,80,50,"#80f0d0"','四角形'],['circle','x,y,r,color','100,100,25,"#ffd36b"','円'],['line','x,y,x2,y2,color,width','0,0,100,100,"#fff",2','線'],['text','text,x,y,size,color','"Hello",20,40,24,"#fff"','文字'],['image','url,x,y,w,h','"https://",0,0,100,100','画像'],
  ['sprite','options','','キャラクターを作成'],['remove','sprite','player','キャラクターを削除'],['move','sprite,dx,dy','player,10,0','移動'],['drawSprite','sprite','player','キャラクター描画'],['drawSprites','','','全キャラクター描画'],['sprites','','','キャラクター一覧'],['physics','dt','game.dt','速度と重力を更新'],['bounds','sprite,bounce','player','枠内に収める'],['collides','a,b','player,enemy','矩形の当たり判定'],['circleHit','x,y,r,x2,y2,r2','0,0,10,20,20,10','円の当たり判定'],['hit','x,y,sprite','game.mouse.x,game.mouse.y,player','点の当たり判定'],
+ ['input','id,label,value','"name", "名前", ""','入力欄を作成'],['getInput','id','"name"','現在の入力値を文字列で取得'],['setInput','id,value','"name", "太郎"','入力値を文字列として設定'],['onInput','id,callback','','入力のたびに文字列を受け取る'],
  ['key','key','"ArrowLeft"','押されているキー'],['keyPressed','key','" "','押した瞬間のキー'],['onKey','callback','','キーイベント'],['onClick','callback','','クリックイベント'],['onUpdate','callback','','毎フレーム更新'],['onDraw','callback','','毎フレーム描画'],['after','seconds,callback','','指定秒後に実行'],['every','seconds,callback','','繰り返し実行'],['cancel','timer','timer','タイマー解除'],['setScore','value','0','スコア設定'],['addScore','value','1','スコア加算'],['getScore','','','スコア取得'],['sound','frequency,seconds','660,0.1','電子音'],['button','id,label,callback','','ボタン作成'],['scene','name,callback','"title"','シーン切り替え'],['getScene','','','現在のシーン'],['end','message','"ゲーム終了"','ゲーム終了'],['log','value','"Hello"','ログ出力'],['random','min,max','0,100','乱数'],['randomInt','min,max','1,6','整数乱数'],['choice','list','[1,2,3]','ランダム選択'],['clamp','value,min,max','value,0,100','範囲制限'],['lerp','a,b,t','0,100,0.5','補間'],['distance','x,y,x2,y2','0,0,100,100','距離'],['burst','x,y,count,color','100,100,20,"#ffd36b"','粒子を発生'],['drawParticles','dt','game.dt','粒子を更新・描画'],['tween','sprite,property,to,seconds','player,"x",300,1','アニメーション'],
  ...['width','height','dt','time','mouse'].map(n=>[n,null,'',{width:'画面幅',height:'画面高さ',dt:'フレーム間の秒数',time:'経過秒',mouse:'ポインター座標と状態'}[n]])
 ].map(([name,args,value,description])=>({owner:'game',name,args,value,description}));
@@ -20,6 +21,7 @@ function completionText(c){if(c.insert!==undefined)return c.insert;const py=$('c
   if(c.name==='onUpdate')value=py?'update':'(dt) => {\n  \n}';
   else if(c.name==='onDraw')value=py?'draw':callback;
   else if(c.name==='onClick')value=py?'on_click':'(x, y) => {\n  \n}';
+  else if(c.name==='onInput')value=py?'"name", lambda text: game.log(text)':'"name", (text) => game.log(text)';
   else if(c.name==='onKey')value=py?'on_key':'(key) => {\n  \n}';
   else if(['after','every'].includes(c.name))value='1, '+callback;
   else if(c.name==='button')value=py?'"start", "開始", lambda: react.start("game1")':'"start", "開始", () => react.start("game1")';

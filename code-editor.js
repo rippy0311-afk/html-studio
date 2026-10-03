@@ -52,6 +52,8 @@ game.button("play", "開始", lambda: react.start())
 react.on("boost", lambda: game.move(player, 30, 0))`};
 
 const apiGuide=[
+ ['入力欄','game.input(id,label,value) / getInput(id)','入力欄を作成。getInputは現在の値を必ず文字列で返します。HTMLページの入力欄も同じIDで取得できます（ページ全体のプレビュー）。'],
+ ['入力の変更','game.onInput(id,callback) / setInput(id,value)','入力のたびにcallbackへ最新の文字列を渡します。setInputで値を変更。値は実行中に保持され、再読み込みではリセットされます。'],
  ['描画','game.clear(color) / background(color)','背景を塗る。onDraw内で毎フレーム呼びます。'],
  ['描画','game.rect(x,y,w,h,color) / circle(x,y,r,color)','四角形・円を描く。色はCSS形式。'],
  ['描画','game.text(text,x,y,size=24,color="#fff")','文字を描く。座標は800×500のゲーム内座標。'],

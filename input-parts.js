@@ -1,0 +1,5 @@
+function inspectInput(){const e=current();$('inputFields').hidden=e?.type!=='input';if(e?.type==='input'){$('inputId').value=e.inputId;$('inputValue').value=e.inputValue;$('inputPlaceholder').value=e.placeholder}}
+function inputMarkup(e){return '<label style="display:flex;flex-direction:column;height:100%;gap:4px"><span>'+esc(e.text)+'</span><input type="text" data-studio-input="'+esc(e.inputId)+'" value="'+esc(e.inputValue)+'" placeholder="'+esc(e.placeholder)+'" style="min-width:0;min-height:0;width:100%;flex:1;font:inherit;color:inherit;box-sizing:border-box;border:1px solid #aaa;border-radius:5px;padding:6px"></label>'}
+for(const [id,key] of [['inputId','inputId'],['inputValue','inputValue'],['inputPlaceholder','placeholder']])document.getElementById(id).addEventListener('input',()=>{const e=current();if(e?.type!=='input')return;const value=$(id).value;if(key==='inputId'&&(!/^[A-Za-z][\w-]{0,39}$/.test(value)||state.elements.some(p=>p.id!==e.id&&p.type==='input'&&p.inputId===value))){toast('入力欄IDは重複しない英字始まりの英数字・_・-（40文字以内）にしてください');return}checkpoint();e[key]=value;render()});
+
+document.getElementById('inputId').addEventListener('blur',()=>inspectInput());

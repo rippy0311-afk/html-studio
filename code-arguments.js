@@ -46,8 +46,13 @@ function argumentHelp(name,method,owner='game'){
  if(name==='seconds')entry=[method==='sound'?'音を鳴らす長さ（秒）。':method==='every'?'繰り返す間隔（秒）。':method==='after'?'処理を実行するまでの待ち時間（秒）。':'アニメーションが完了するまでの時間（秒）。',method==='sound'?'0.1':'1.5'];
  if(name==='min'||name==='max')entry=[method==='clamp'?(name==='min'?'値が下回らないようにする下限です。':'値が超えないようにする上限です。'):(name==='min'?'乱数の下限。この値を含みます。':method==='randomInt'?'整数乱数の上限。この値を含みます。':'乱数の上限。この値は含みません。'),name==='min'?'0':'100'];
  if(name==='value')entry=method==='setScore'?['スコアをこの値に設定します。','0']:method==='addScore'?['スコアに加える点数。負の数なら減点です。','10']:method==='clamp'?['上下限の範囲内に収めたい数値です。','150']:['実行ログに表示する内容。計算結果や変数は「式」で指定できます。','動作確認'];
+ if(['input','getInput','setInput','onInput'].includes(method)){
+  if(name==='id')entry=['入力欄を識別するID。ページの入力欄IDとも共通です。','name'];
+  if(name==='label')entry=['入力欄の上に表示する説明です。','名前'];
+  if(name==='value')entry=['入力欄の文字列。数字も文字列として保存します。','太郎 / 001'];
+ }
  if(name==='callback'){
-  const timing={onUpdate:'毎フレームの更新時に呼ばれ、経過秒 dt を受け取ります。',onDraw:'毎フレームの描画時に呼ばれます。引数はありません。',onClick:'ゲーム画面のクリック時に呼ばれ、xとyを受け取ります。',onKey:'キーを押した瞬間に呼ばれ、キーの名前を受け取ります。',button:'ボタンを押したときに呼ばれます。',after:'指定した秒数の後に1回呼ばれます。',every:'指定した間隔で繰り返し呼ばれます。',scene:'そのシーンへ切り替えたときに呼ばれます。',on:'同じ名前のイベントが発火したときに呼ばれます。'}[method]||'指定したタイミングで呼ばれます。';entry=['実行したい関数を「式」で指定。'+timing,'自分で定義した関数名（例: update）'];
+  const timing={onInput:'入力値が変わるたびに、最新の文字列 text を受け取ります。',onUpdate:'毎フレームの更新時に呼ばれ、経過秒 dt を受け取ります。',onDraw:'毎フレームの描画時に呼ばれます。引数はありません。',onClick:'ゲーム画面のクリック時に呼ばれ、xとyを受け取ります。',onKey:'キーを押した瞬間に呼ばれ、キーの名前を受け取ります。',button:'ボタンを押したときに呼ばれます。',after:'指定した秒数の後に1回呼ばれます。',every:'指定した間隔で繰り返し呼ばれます。',scene:'そのシーンへ切り替えたときに呼ばれます。',on:'同じ名前のイベントが発火したときに呼ばれます。'}[method]||'指定したタイミングで呼ばれます。';entry=['実行したい関数を「式」で指定。'+timing,'自分で定義した関数名（例: update）'];
  }
  return{detail:entry?.[0]||'この処理に渡す値です。',example:entry?.[1]||''};
 }
@@ -96,11 +101,13 @@ function readLiteral(raw){
  return{type:'expression',value:raw};
 }
 function parameterInfo(name,method){
+ if(name==='value'&&['input','setInput'].includes(method))return{name,type:'text',value:'',description:'入力する文字列'};
+ if(name==='id'&&['input','getInput','setInput','onInput'].includes(method))return{name,type:'text',value:'name',description:'入力欄ID'};
  const known=spriteProperties.find(p=>p.name===name);if(known)return{...known};
  const texts={text:'Hello',url:'https://',key:'ArrowLeft',label:'開始',name:'boost',message:'ゲーム終了',property:'x',id:method==='button'?'start':'game1'};
  if(Object.hasOwn(texts,name))return{name,type:'text',value:texts[name],description:'文字列'};
  if(name==='bounce')return{name,type:'boolean',value:'false',description:'端で跳ね返る'};
- if(name==='callback'){const args={onUpdate:'dt',onClick:'x, y',onKey:'key'}[method]||'';return{name,type:'expression',value:$('codeLanguage').value==='python'?'lambda'+(args?' '+args:'')+': None':'('+args+') => {}',description:'呼び出す関数・式'}}
+ if(name==='callback'){const args={onInput:'text',onUpdate:'dt',onClick:'x, y',onKey:'key'}[method]||'';return{name,type:'expression',value:$('codeLanguage').value==='python'?'lambda'+(args?' '+args:'')+': None':'('+args+') => {}',description:'呼び出す関数・式'}}
  if(['sprite','timer','list'].includes(name)||(method==='collides'&&['a','b'].includes(name)))return{name,type:'expression',value:name==='list'?'[1, 2, 3]':name==='sprite'||name==='a'?'player':name==='b'?'enemy':'timer',description:'変数・関数・式'};
  if(name==='value'&&method==='log')return{name,type:'text',value:'Hello',description:'表示する内容'};
  const defaults={dt:'game.dt',seconds:'1',frequency:'660',size:'24',count:'20',r:'25',r2:'25',width:'2',max:'100',t:'0.5',to:'300'};
@@ -137,7 +144,7 @@ function refreshArguments(){
 }
 function applyArguments(){
  const session=argumentSession,source=$('codeSource');if(!session||source.value!==session.snapshot){$('argumentStatus').textContent='コードが変更されました。対象の括弧内をクリックして開き直してください。';return}
- const required={rect:4,circle:3,line:4,text:3,image:5,remove:1,move:3,drawSprite:1,bounds:1,collides:2,circleHit:6,hit:3,onKey:1,onClick:1,onUpdate:1,onDraw:1,after:2,every:2,cancel:1,setScore:1,button:3,scene:1,randomInt:2,choice:1,clamp:3,lerp:3,distance:4,burst:2,tween:4,on:2,emit:1,key:1,keyPressed:1};
+ const required={input:1,getInput:1,setInput:2,onInput:2,rect:4,circle:3,line:4,text:3,image:5,remove:1,move:3,drawSprite:1,bounds:1,collides:2,circleHit:6,hit:3,onKey:1,onClick:1,onUpdate:1,onDraw:1,after:2,every:2,cancel:1,setScore:1,button:3,scene:1,randomInt:2,choice:1,clamp:3,lerp:3,distance:4,burst:2,tween:4,on:2,emit:1,key:1,keyPressed:1};
  const py=$('codeLanguage').value==='python',values=[],last=Math.max((required[session.call.name]||0)-1,session.fields.findLastIndex(f=>f.touched||f.original!==undefined));
  for(const [index,field] of session.fields.entries()){
   if(!session.sprite&&index>last)continue;
