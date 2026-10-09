@@ -17,6 +17,9 @@
   reference.id = 'textCommands';
   reference.innerHTML = '<summary>使える命令（' + textCommandGuide.length + '種類）</summary><p>命令名・説明で検索できます。「末尾に追加」で例を挿入します。通常の文字は text1、text2…、ボタンは button1、button2… のIDで操作できます。自分で作る部品には自由なIDを指定します。</p><input id="textCommandSearch" type="search" placeholder="命令を検索（例：タイマー、入力、色）" aria-label="テキスト命令を検索"><div id="textCommandList"></div><p>変数・入力・定義・タイマーは現在の画面内で有効です。changeTo / back / restart でリセットされます。これらの命令に加え、JavaScriptの if / for / 配列なども使えます。</p>';
   panel.append(reference);
+  const inlineHelp = document.createElement('p');
+  inlineHelp.textContent = '文字列の中で $[ボタン] を使うと、周りの文字と同じサイズで同じ行に表示します。例："ここを $[押す<print(\'こんにちは\')>] と表示"。ボタンを含む文字全体のサイズは fontSize(24, "text1") で変更できます。記号をそのまま表示するには \\$[ボタン] と書きます。';
+  $('textHelp').append(inlineHelp);
   const log = document.createElement('pre');
   log.id = 'textLog'; log.hidden = true; log.setAttribute('aria-label', 'テキストモードの実行ログ');
   panel.querySelector('.text-preview').append(log);
@@ -36,7 +39,7 @@
     // URL avoids reusing a failed or incomplete cached response.
     runtimePromise = new Promise((resolve,reject) => {
       const script = document.createElement('script');
-      script.src = new URL('text-mode.js?v=runtime-recovery-1&retry=' + Date.now(), location.href).href;
+      script.src = new URL('text-mode.js?v=inline-buttons-1&retry=' + Date.now(), location.href).href;
       const finish = error => {
         clearTimeout(timeout); script.onload = script.onerror = null;
         if (error) { script.remove(); reject(error); } else resolve();

@@ -9,19 +9,43 @@ function parseTextMode(source, commandNames = []) {
     error.nodes = nodes.slice();
     throw error;
   };
-  function quoted() {
+  function quoted(inline = false) {
     const start = i++;
     let value = '';
+    const parts = [];
     while (i < source.length) {
       const c = source[i++];
-      if (c === '"') return value;
+      if (c === '"') {
+        if (!inline) return value;
+        if (!parts.length) return {type:'text',text:value};
+        parts.push({type:'text',text:value});
+        return {type:'text',text:parts.map(part=>part.text).join(''),parts};
+      }
+      if (inline && c === '$' && source[i] === '[') {
+        parts.push({type:'text',text:value}); value = '';
+        parts.push({...button(),inline:true});
+        continue;
+      }
       if (c === '\\') {
         const next = source[i++];
         if (next === undefined) break;
-        value += ({n:'\n',r:'\r',t:'\t','"':'"','\\':'\\'})[next] ?? '\\' + next;
+        value += next === '$' && source[i] === '[' ? '$' : ({n:'\n',r:'\r',t:'\t','"':'"','\\':'\\'})[next] ?? '\\' + next;
       } else value += c;
     }
     fail('文字列を閉じる " がありません。', start);
+  }
+  function button() {
+    const start = i++;
+    let label = '';
+    const scripts = [];
+    while (i < source.length && source[i] !== ']') {
+      if (source[i] === '<') scripts.push(script());
+      else if (source[i] === '"') label += quoted();
+      else label += source[i++];
+    }
+    if (source[i] !== ']') fail('ボタンを閉じる ] がありません。', start);
+    i++;
+    return {type:'button',text:label.trim(),scripts};
   }
   function script() {
     const start = i++;
@@ -77,22 +101,11 @@ function parseTextMode(source, commandNames = []) {
     const c = source[i];
     if (c === '\n') { nodes.push({type:'break'}); i++; }
     else if (/\s/.test(c)) i++;
-    else if (c === '"') nodes.push({type:'text', text:quoted()});
+    else if (c === '"') nodes.push(quoted(true));
     else if (c === '<') nodes.push({type:'script', ...script()});
     else if (c === '{') nodes.push(definition());
-    else if (c === '[') {
-      const start = i++;
-      let label = '';
-      const scripts = [];
-      while (i < source.length && source[i] !== ']') {
-        if (source[i] === '<') scripts.push(script());
-        else if (source[i] === '"') label += quoted();
-        else label += source[i++];
-      }
-      if (source[i] !== ']') fail('ボタンを閉じる ] がありません。', start);
-      i++;
-      nodes.push({type:'button', text:label.trim(), scripts});
-    } else fail('文字は "..."、ボタンは [...]、スクリプトは <...>、定義は {class{名前{<処理>}}} で書いてください。');
+    else if (c === '[') nodes.push(button());
+    else fail('文字は "..."、ボタンは [...]、スクリプトは <...>、定義は {class{名前{<処理>}}} で書いてください。');
   }
   return nodes;
 }
@@ -103,7 +116,7 @@ function compileTextMode(nodes) {
   const scripts = list => { for (const script of list) add(script.code, script.line); };
   let button = 0;
   for (const node of nodes) if (node.type === 'definition') { add('function ' + node.name + '(){'); scripts(node.scripts); add('}'); }
-  for (const node of nodes) if (node.type === 'button') { add('onClick("button' + ++button + '",()=>{'); scripts(node.scripts); add('});'); }
+  for (const node of nodes.flatMap(node=>node.parts || [node])) if (node.type === 'button') { add('onClick("button' + ++button + '",()=>{'); scripts(node.scripts); add('});'); }
   for (const node of nodes) if (node.type === 'script') scripts([node]);
   return {program:lines.join('\n') + '\n//# sourceURL=text-studio-user.js', lineMap};
 }
@@ -145,8 +158,9 @@ function textModePlayer(config, parse, workerSource, compile) {
     done(id);
     pending.set(id, setTimeout(() => { stop(); report('処理が完了しないため停止しました。無限ループを確認してください。'); }, 2500));
   }
-  const find = id => { const element = elements.get(id); if (!element) throw Error('部品がありません：' + id); return element; };
+  const find = id => { const element = elements.get(id); if (!element || !root.contains(element)) throw Error('部品がありません：' + id); return element; };
   function make(id, tag) {
+    if (elements.has(id) && !root.contains(elements.get(id))) elements.delete(id);
     if (elements.has(id)) { const element = find(id); if (element.localName !== tag) throw Error('別の種類の部品が同じIDを使っています：' + id); return element; }
     if (elements.size >= 10000) throw Error('部品は10000個までです。');
     const element = document.createElement(tag);
@@ -203,15 +217,22 @@ function textModePlayer(config, parse, workerSource, compile) {
     root.replaceChildren(); elements.clear(); log.textContent = ''; log.hidden = true;
     document.body.removeAttribute('style'); document.title = config.title;
     let textCount = 0, buttonCount = 0;
+    function renderButton(node, parent = root) {
+      const button = make('button' + ++buttonCount, 'button');
+      button.type = 'button'; button.textContent = node.text;
+      if (node.inline) button.className = 'text-inline-button';
+      parent.append(button);
+    }
     for (const node of nodes) {
       if (node.type === 'script' || node.type === 'definition') continue;
       else if (node.type === 'break') root.append(document.createElement('br'));
-      else if (node.type === 'text') make('text' + ++textCount, 'span').textContent = node.text;
-      else {
-        const id = 'button' + ++buttonCount, button = make(id, 'button');
-        button.type = 'button';
-        button.textContent = node.text;
-      }
+      else if (node.type === 'text') {
+        const text = make('text' + ++textCount, 'span');
+        if (node.parts) for (const part of node.parts) {
+          if (part.type === 'button') renderButton(part,text);
+          else text.append(document.createTextNode(part.text));
+        } else text.textContent = node.text;
+      } else renderButton(node);
     }
     // Callbacks close over declarations in the initial script.
     const {program, lineMap} = compile(nodes);
@@ -252,5 +273,5 @@ function textModePlayer(config, parse, workerSource, compile) {
 function textModeDocument(source, title = 'Text Studio', token = '') {
   const json = JSON.stringify({source,token,title,commandNames:textCommandGuide.map(row => row[1])}).replace(/</g, '\\u003c');
   const safeTitle = String(title).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]);
-  return '<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + safeTitle + '</title><style>*{box-sizing:border-box}body{margin:0;background:#000;color:#fff;font:18px/1.8 Consolas,monospace;padding:28px;overflow-wrap:anywhere}#textScreen{white-space:pre-wrap}button,input{font:inherit;background:transparent;color:inherit;border:1px solid #fff;padding:6px 16px;margin:4px;cursor:pointer;max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere}[hidden]{display:none!important}input{max-width:100%;min-width:0;box-sizing:border-box}button:disabled,input:disabled{opacity:.4;cursor:default}button:hover,button:focus-visible{background:#fff;color:#000}button:focus-visible{outline:2px solid #fff;outline-offset:4px}#textRuntimeLog{white-space:pre-wrap;border-top:1px solid currentColor;font:13px/1.6 monospace}#textRuntimeIssue{white-space:pre-wrap;border:1px solid #fff;padding:12px;font:14px/1.6 monospace}</style></head><body><div id="textScreen"></div><pre id="textRuntimeIssue" role="alert" hidden></pre><pre id="textRuntimeLog" aria-label="実行ログ" hidden></pre><script>(' + textModePlayer.toString() + ')(' + json + ',' + parseTextMode.toString() + ',' + JSON.stringify('(' + textModeWorker.toString() + ')(' + createTextCommands.toString() + ');').replace(/</g,'\\u003c') + ',' + compileTextMode.toString() + ');<\/script></body></html>';
+  return '<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + safeTitle + '</title><style>*{box-sizing:border-box}body{margin:0;background:#000;color:#fff;font:18px/1.8 Consolas,monospace;padding:28px;overflow-wrap:anywhere}#textScreen{white-space:pre-wrap}button,input{font:inherit;background:transparent;color:inherit;border:1px solid #fff;padding:6px 16px;margin:4px;cursor:pointer;max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere}.text-inline-button{display:inline;padding:0 .18em;margin:0 .12em;font:inherit;line-height:inherit;vertical-align:baseline;border:0;border-radius:0;outline:1px solid currentColor;outline-offset:0;white-space:pre-wrap}[hidden]{display:none!important}input{max-width:100%;min-width:0;box-sizing:border-box}button:disabled,input:disabled{opacity:.4;cursor:default}button:hover,button:focus-visible{background:#fff;color:#000}button:focus-visible{outline:2px solid #fff;outline-offset:4px}#textRuntimeLog{white-space:pre-wrap;border-top:1px solid currentColor;font:13px/1.6 monospace}#textRuntimeIssue{white-space:pre-wrap;border:1px solid #fff;padding:12px;font:14px/1.6 monospace}</style></head><body><div id="textScreen"></div><pre id="textRuntimeIssue" role="alert" hidden></pre><pre id="textRuntimeLog" aria-label="実行ログ" hidden></pre><script>(' + textModePlayer.toString() + ')(' + json + ',' + parseTextMode.toString() + ',' + JSON.stringify('(' + textModeWorker.toString() + ')(' + createTextCommands.toString() + ');').replace(/</g,'\\u003c') + ',' + compileTextMode.toString() + ');<\/script></body></html>';
 }

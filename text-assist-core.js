@@ -6,7 +6,7 @@ function textDiagnostics(source) {
   let nodes;
   try { nodes = parseTextMode(source, textCommandGuide.map(row => row[1])); }
   catch (error) { errors.push({line:error.line || 1, message:error.message}); nodes = error.nodes || []; }
-  for (const node of nodes) for (const script of node.type === 'script' ? [node] : node.scripts || []) {
+  for (const node of nodes.flatMap(node=>node.parts || [node])) for (const script of node.type === 'script' ? [node] : node.scripts || []) {
     try { acorn.parse(script.code, {ecmaVersion:'latest', allowReturnOutsideFunction:true}); }
     catch (error) { errors.push({line:script.line + (error.loc?.line || 1) - 1, message:error.message.replace(/ \(\d+:\d+\)$/, '')}); }
   }
@@ -20,12 +20,22 @@ function textDiagnostics(source) {
 
 // Tolerant scan: autocomplete must also work while brackets/strings are unfinished.
 function textScriptContext(source, caret) {
-  let script = false, quote = '', comment = '', depth = 0, start = 0, quoteStart = 0;
+  let script = false, quote = '', comment = '', depth = 0, start = 0, quoteStart = 0, inlineButton = false;
   for (let i = 0; i < caret; i++) {
     const c = source[i], next = source[i + 1];
     if (comment) { if (comment === 'line' && c === '\n') comment = ''; else if (comment === 'block' && c === '*' && next === '/') { comment = ''; i++; } continue; }
-    if (quote) { if (c === '\\') i++; else if (c === quote) quote = ''; continue; }
-    if (!script) { if (c === '"') quote = c; else if (c === '<') { script = true; start = i + 1; depth = 0; } continue; }
+    if (quote) {
+      if (c === '\\') i++;
+      else if (!script && !inlineButton && c === '$' && next === '[') { inlineButton = true; quote = ''; i++; }
+      else if (c === quote) quote = '';
+      continue;
+    }
+    if (!script) {
+      if (inlineButton && c === ']') { inlineButton = false; quote = '"'; }
+      else if (c === '"') quote = c;
+      else if (c === '<') { script = true; start = i + 1; depth = 0; }
+      continue;
+    }
     if ('"\'`'.includes(c)) { quote = c; quoteStart = i; }
     else if (c === '/' && next === '/') { comment = 'line'; i++; }
     else if (c === '/' && next === '*') { comment = 'block'; i++; }
