@@ -6,6 +6,7 @@ function parseTextMode(source, commandNames = []) {
   const fail = (message, at = i) => {
     const error = new Error(message);
     error.line = source.slice(0, at).split('\n').length;
+    error.nodes = nodes.slice();
     throw error;
   };
   function quoted() {
@@ -96,25 +97,38 @@ function parseTextMode(source, commandNames = []) {
   return nodes;
 }
 
+function compileTextMode(nodes) {
+  const lines = ['"use strict";'], lineMap = [null, null];
+  const add = (code, line = null) => { for (const [offset, text] of code.split('\n').entries()) { lines.push(text); lineMap.push(line === null ? null : line + offset); } };
+  const scripts = list => { for (const script of list) add(script.code, script.line); };
+  let button = 0;
+  for (const node of nodes) if (node.type === 'definition') { add('function ' + node.name + '(){'); scripts(node.scripts); add('}'); }
+  for (const node of nodes) if (node.type === 'button') { add('onClick("button' + ++button + '",()=>{'); scripts(node.scripts); add('});'); }
+  for (const node of nodes) if (node.type === 'script') scripts([node]);
+  return {program:lines.join('\n') + '\n//# sourceURL=text-studio-user.js', lineMap};
+}
+
 function textModeWorker(createCommands) {
   let invocation = 0;
-  const error = reason => postMessage({type:'error', message:String(reason?.message || reason)});
+  let lineMap = [];
+  const location = reason => { const match = String(reason?.stack || '').match(/text-studio-user\.js:(\d+):(\d+)/); return {line:match ? lineMap[Number(match[1]) - 2] || null : null}; };
+  const error = reason => postMessage({type:'error', message:String(reason?.message || reason), ...location(reason)});
   const invoke = fn => {
     const id = ++invocation;
     postMessage({type:'busy', id});
     try { fn(); } catch (reason) { error(reason); }
     finally { postMessage({type:'done', id}); }
   };
-  const library = createCommands(data => postMessage(data), invoke);
+  const library = createCommands(data => postMessage(data.type === 'command' ? {...data, ...location(new Error())} : data), invoke);
   onmessage = event => invoke(() => {
     const data = event.data;
-    if (data.type === 'boot') new Function(...Object.keys(library.api), data.program)(...Object.values(library.api));
+    if (data.type === 'boot') { lineMap = data.lineMap; new Function(...Object.keys(library.api), data.program)(...Object.values(library.api)); }
     else if (data.type === 'event') library.event(data);
   });
   self.addEventListener('unhandledrejection', event => { event.preventDefault(); error(event.reason); });
 }
 
-function textModePlayer(config, parse, workerSource) {
+function textModePlayer(config, parse, workerSource, compile) {
   const root = document.getElementById('textScreen');
   const issue = document.getElementById('textRuntimeIssue');
   const log = document.getElementById('textRuntimeLog');
@@ -189,21 +203,18 @@ function textModePlayer(config, parse, workerSource) {
     root.replaceChildren(); elements.clear(); log.textContent = ''; log.hidden = true;
     document.body.removeAttribute('style'); document.title = config.title;
     let textCount = 0, buttonCount = 0;
-    const initial = [], actions = [], definitions = [];
     for (const node of nodes) {
-      if (node.type === 'script') initial.push(node.code);
-      else if (node.type === 'definition') definitions.push('function ' + node.name + '(){\n' + node.scripts.map(s => s.code).join('\n') + '\n}');
+      if (node.type === 'script' || node.type === 'definition') continue;
       else if (node.type === 'break') root.append(document.createElement('br'));
       else if (node.type === 'text') make('text' + ++textCount, 'span').textContent = node.text;
       else {
         const id = 'button' + ++buttonCount, button = make(id, 'button');
-        actions.push('onClick(' + JSON.stringify(id) + ',()=>{\n' + node.scripts.map(s => s.code).join('\n') + '\n});');
         button.type = 'button';
         button.textContent = node.text;
       }
     }
     // Callbacks close over declarations in the initial script.
-    const program = '"use strict";\n' + definitions.join('\n') + '\n' + actions.join('\n') + '\n' + initial.join('\n');
+    const {program, lineMap} = compile(nodes);
     const url = URL.createObjectURL(new Blob([workerSource], {type:'text/javascript'}));
     try { worker = new Worker(url); } catch (error) { report(error.message); return; }
     finally { URL.revokeObjectURL(url); }
@@ -212,13 +223,13 @@ function textModePlayer(config, parse, workerSource) {
       const data = event.data;
       if (data.type === 'busy') { done('boot'); watchdog(data.id); }
       else if (data.type === 'done') done(data.id);
-      else if (data.type === 'error') { stop(); report(data.message); }
+      else if (data.type === 'error') { stop(); report(data.message, currentSource === config.source ? data.line : null); }
       else if (data.type === 'stop') { stop(); report('停止中'); }
       else if (data.type === 'log') {
         log.hidden = Boolean(config.token); log.textContent = (log.textContent + data.message + '\n').slice(-10000);
         parent.postMessage({studioText:true, token:config.token, type:'log', message:data.message}, '*');
       }
-      else if (data.type === 'command') { try { command(data.op, data.args); } catch (error) { stop(); report(error.message); } }
+      else if (data.type === 'command') { try { command(data.op, data.args); } catch (error) { stop(); report(error.message, currentSource === config.source ? data.line : null); } }
       else if (data.type === 'navigate') {
         if (++navigations > 30) { stop(); report('画面の切り替えが繰り返されています。changeTo を確認してください。'); return; }
         history.push(currentSource); if (history.length > 100) history.shift(); render(data.source);
@@ -232,7 +243,7 @@ function textModePlayer(config, parse, workerSource) {
     };
     worker.onerror = event => { event.preventDefault(); stop(); report(event.message); };
     watchdog('boot');
-    worker.postMessage({type:'boot', program});
+    worker.postMessage({type:'boot', program, lineMap});
   }
   window.addEventListener('pagehide', stop);
   render(config.source);
@@ -241,5 +252,5 @@ function textModePlayer(config, parse, workerSource) {
 function textModeDocument(source, title = 'Text Studio', token = '') {
   const json = JSON.stringify({source,token,title,commandNames:textCommandGuide.map(row => row[1])}).replace(/</g, '\\u003c');
   const safeTitle = String(title).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]);
-  return '<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + safeTitle + '</title><style>*{box-sizing:border-box}body{margin:0;background:#000;color:#fff;font:18px/1.8 Consolas,monospace;padding:28px;overflow-wrap:anywhere}#textScreen{white-space:pre-wrap}button,input{font:inherit;background:transparent;color:inherit;border:1px solid #fff;padding:6px 16px;margin:4px;cursor:pointer;max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere}[hidden]{display:none!important}input{max-width:100%;min-width:0;box-sizing:border-box}button:disabled,input:disabled{opacity:.4;cursor:default}button:hover,button:focus-visible{background:#fff;color:#000}button:focus-visible{outline:2px solid #fff;outline-offset:4px}#textRuntimeLog{white-space:pre-wrap;border-top:1px solid currentColor;font:13px/1.6 monospace}#textRuntimeIssue{white-space:pre-wrap;border:1px solid #fff;padding:12px;font:14px/1.6 monospace}</style></head><body><div id="textScreen"></div><pre id="textRuntimeIssue" role="alert" hidden></pre><pre id="textRuntimeLog" aria-label="実行ログ" hidden></pre><script>(' + textModePlayer.toString() + ')(' + json + ',' + parseTextMode.toString() + ',' + JSON.stringify('(' + textModeWorker.toString() + ')(' + createTextCommands.toString() + ');').replace(/</g,'\\u003c') + ');<\/script></body></html>';
+  return '<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + safeTitle + '</title><style>*{box-sizing:border-box}body{margin:0;background:#000;color:#fff;font:18px/1.8 Consolas,monospace;padding:28px;overflow-wrap:anywhere}#textScreen{white-space:pre-wrap}button,input{font:inherit;background:transparent;color:inherit;border:1px solid #fff;padding:6px 16px;margin:4px;cursor:pointer;max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere}[hidden]{display:none!important}input{max-width:100%;min-width:0;box-sizing:border-box}button:disabled,input:disabled{opacity:.4;cursor:default}button:hover,button:focus-visible{background:#fff;color:#000}button:focus-visible{outline:2px solid #fff;outline-offset:4px}#textRuntimeLog{white-space:pre-wrap;border-top:1px solid currentColor;font:13px/1.6 monospace}#textRuntimeIssue{white-space:pre-wrap;border:1px solid #fff;padding:12px;font:14px/1.6 monospace}</style></head><body><div id="textScreen"></div><pre id="textRuntimeIssue" role="alert" hidden></pre><pre id="textRuntimeLog" aria-label="実行ログ" hidden></pre><script>(' + textModePlayer.toString() + ')(' + json + ',' + parseTextMode.toString() + ',' + JSON.stringify('(' + textModeWorker.toString() + ')(' + createTextCommands.toString() + ');').replace(/</g,'\\u003c') + ',' + compileTextMode.toString() + ');<\/script></body></html>';
 }

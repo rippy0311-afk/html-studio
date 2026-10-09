@@ -21,6 +21,9 @@
   log.id = 'textLog'; log.hidden = true; log.setAttribute('aria-label', 'テキストモードの実行ログ');
   panel.querySelector('.text-preview').append(log);
   const input = $('textSource');
+  const assist = createTextAssist(input, error => { $('textIssue').textContent = error ? (error.line ? '行 ' + error.line + '：' : '') + error.message : ''; });
+  const hint = document.createElement('span'); hint.className = 'text-assist-hint'; hint.textContent = '行末にエラー表示 · ↑↓で候補選択 · Tab / Enterで挿入 · Escで閉じる';
+  panel.querySelector('label[for="textSource"]').append(hint);
   let timer, token = '', lastSource, editing = false;
   function run() {
     clearTimeout(timer);
@@ -29,13 +32,8 @@
     $('textIssue').textContent = '';
     log.textContent = ''; log.hidden = true;
     try {
-      const nodes = parseTextMode(state.textSource || '', textCommandGuide.map(row => row[1]));
-      for (const node of nodes) {
-        for (const script of node.type === 'script' ? [node] : node.scripts || []) {
-          try { acorn.parse(script.code, {ecmaVersion:'latest', allowReturnOutsideFunction:true}); }
-          catch (error) { error.line = script.line + (error.loc?.line || 1) - 1; throw error; }
-        }
-      }
+      const errors = assist.check();
+      if (errors.length) throw errors[0];
       // Create the browsing context after the panel becomes visible. Reusing an
       // iframe first loaded under a hidden panel can leave Chromium's layout stale.
       const frame = $('textLive').cloneNode(false);
@@ -43,7 +41,6 @@
       $('textLive').replaceWith(frame);
     } catch (error) {
       $('textLive').srcdoc = '<body style="background:#000;color:#fff"></body>';
-      $('textIssue').textContent = (error.line ? '行 ' + error.line + '：' : '') + error.message;
     }
   }
   const oldRender = render;
@@ -58,7 +55,7 @@
       input.value = state.textSource || '';
       if (lastSource !== input.value) run();
       lastSource = input.value;
-    } else { clearTimeout(timer); $('textLive').srcdoc = ''; lastSource = undefined; }
+    } else { clearTimeout(timer); assist.hide(); $('textLive').srcdoc = ''; lastSource = undefined; }
   };
   selector.onchange = () => {
     checkpoint();
@@ -67,22 +64,25 @@
     editing = false;
     select(null);
   };
-  input.addEventListener('input', () => {
+  input.addEventListener('input', event => {
     if (!editing) { checkpoint(); editing = true; }
     state.textSource = input.value;
     lastSource = input.value;
     clearTimeout(timer);
+    token = '';
+    if (event.isComposing) return;
     timer = setTimeout(run, 650);
   });
   input.addEventListener('blur', () => { editing = false; });
   input.addEventListener('keydown', event => {
+    if (event.isComposing) return;
     if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); run(); }
     if (event.key === 'Tab') { event.preventDefault(); input.setRangeText('  ', input.selectionStart, input.selectionEnd, 'end'); input.dispatchEvent(new Event('input', {bubbles:true})); }
   });
   window.addEventListener('message', event => {
     if (event.source !== $('textLive').contentWindow || !event.data?.studioText || event.data.token !== token) return;
     if (event.data.type === 'log') { log.hidden = false; log.textContent = (log.textContent + event.data.message + '\n').slice(-10000); return; }
-    $('textIssue').textContent = (event.data.line ? '行 ' + event.data.line + '：' : '') + event.data.message;
+    assist.runtime(event.data);
   });
   for (const [group, name, signature, description, example] of textCommandGuide) {
     const row = document.createElement('div'); row.className = 'text-command-row';
