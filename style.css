@@ -14,3 +14,23 @@
 
 #codeHighlight{position:absolute;inset:0;margin:0;padding:0 8px;border:0;font:14px/22px Consolas,monospace;white-space:pre;tab-size:4;overflow:hidden;pointer-events:none;color:#e4ebff}#codeSource.syntax-input{color:transparent;caret-color:#fff;-webkit-text-fill-color:transparent}#codeSource.syntax-input::selection{background:#8b78ed66}#codeOverlay{z-index:2}.syntax-keyword{color:#d8a6ff}.syntax-api{color:#78dcff}.syntax-function{color:#ffdf91}.syntax-variable{color:#e4ebff}.syntax-property{color:#ffb995}.syntax-number{color:#91e6bd}.syntax-string{color:#f5b3d9}.syntax-boolean{color:#b6bbff}.syntax-comment{color:#a0adc3}.syntax-operator{color:#79d8e8}.code-color-legend{display:flex;flex-wrap:wrap;gap:6px 14px;background:#20273d;padding:7px 10px;font-size:11px}.argument-field[data-value-type=number]{border-left:4px solid #168453;background:#f1fff7}.argument-field[data-value-type=text]{border-left:4px solid #b23c82;background:#fff4fb}.argument-field[data-value-type=boolean]{border-left:4px solid #6554c0;background:#f5f3ff}.argument-field[data-value-type=expression]{border-left:4px solid #9a6d0c;background:#fffbec}.argument-field label{color:#30354d}
 #codeSuggestions strong span{display:inline;font:inherit;line-height:inherit;white-space:pre}#codeSuggestions strong .syntax-function{color:#ffdf91}#codeSuggestions strong .syntax-variable{color:#ffb995}
+
+/* Text Studio: monochrome source and output, with the existing project controls. */
+#studioMode{padding:8px;max-width:170px;border:1px solid #ddd;border-radius:6px;background:white}
+body>main[hidden],#textWorkspace[hidden]{display:none!important}
+#textWorkspace{height:calc(100dvh - 76px);display:flex;flex-direction:column;background:#000;color:#fff;overflow:auto}
+.text-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 22px;border-bottom:1px solid #444}
+.text-toolbar>span{flex:1;color:#ccc;font-size:12px}
+#textWorkspace button{background:#000;color:#fff;border:1px solid #777}
+#textWorkspace button:hover{background:#fff;color:#000}
+.text-columns{display:grid;grid-template-columns:1fr 1fr;flex:1;min-height:300px}
+.text-writing,.text-preview{min-width:0;display:flex;flex-direction:column;padding:18px;gap:12px}
+.text-writing{border-right:1px solid #444}
+.text-writing>label,.text-preview>b{font-size:12px;color:#ccc}
+#textSource{flex:1;min-height:220px;resize:none;width:100%;background:#000;color:#fff;caret-color:#fff;border:1px solid #666;padding:16px;font:16px/1.8 Consolas,monospace;tab-size:2;border-radius:0}
+#textLive{flex:1;width:100%;min-height:220px;background:#000;border:1px solid #444}
+#textIssue{margin:0;min-height:20px;white-space:pre-wrap;font-size:13px}
+#textHelp{padding:14px 22px;border-top:1px solid #444;flex-shrink:0;font-size:13px;line-height:1.7}
+#textHelp p{margin:8px 0}#textHelp summary{cursor:pointer}#textHelp code{color:#fff;background:#222;padding:2px 4px}
+@media(max-width:1000px){body.text-mode>header{height:auto;min-height:76px;flex-wrap:wrap;padding:12px;gap:8px}body.text-mode #projectName{width:150px}body.text-mode .header-actions{flex-wrap:wrap}body.text-mode #textWorkspace{height:auto;min-height:calc(100dvh - 130px)}}
+@media(max-width:700px){.text-columns{grid-template-columns:1fr}.text-writing{border-right:0;border-bottom:1px solid #444}.text-toolbar{gap:8px;padding:12px}.text-toolbar>span{flex-basis:100%}.text-preview{min-height:320px}#textSource{min-height:240px}#textHelp{padding:14px}}

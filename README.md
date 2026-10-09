@@ -63,3 +63,32 @@ Projects and exported HTML are saved in Supabase `studio_projects`. The page rem
 Validation: `node tests/cloud-store.cjs`. A transaction rolled back in the live SQL editor verified owner save/read/update, revision increment, stale-write rejection, cross-owner read/update/insert denial, and anonymous privilege denial. Browser UI tests used a local mock to verify reload restore, listing, cross-tab conflicts, and save-as-copy. Actual user email confirmation/sign-in requires the user to register their own account; it has not been claimed as tested.
 
 Docs: https://supabase.com/docs/guides/auth/auth-smtp and https://supabase.com/docs/guides/database/postgres/row-level-security
+
+## テキストモード
+
+画面上部の「制作モード」で「テキストモード」を選択します。入力とプレビューは黒背景・白文字。レイアウトのパーツは保持され、モードを戻すと編集を再開できます。保存ファイル・クラウド保存にはモードとソースを含め、HTML書き出しは選択中のモードを出力します。
+
+```text
+"HELLO WORLD"
+[HELLO<changeTo('\"こんにちは！\"')>]
+```
+
+- `"..."` は文字、`[...]` はボタン、`<...>` はJavaScriptです。
+- ボタン内のスクリプトはクリック時、それ以外は画面の初期表示時に実行します。
+- `changeTo(source)` は画面全体を同じ記法のソースに置き換えます。`changeTo("")` は空の画面にします。切り替え時にスクリプトの変数はリセットされます。
+- ソースの改行は表示にも反映。文字列では `\"`、`\\`、`\n`、`\t` が使えます。
+- スクリプト内の比較演算 `>` は括弧内に書きます（例：`if (n > 0) { ... }`）。
+- 「実行 / 最初から」または Ctrl+Enter で再実行。「停止」で実行環境を破棄します。
+- JavaScriptは専用Workerで実行し、編集画面のDOMや保存情報には触れません。同期処理が2.5秒を超えると停止します。外部ライブラリやDOM APIは提供しません。
+
+### 名前付きの処理
+
+```text
+{class{hello{
+  <changeTo('"こんにちは！"')>
+}}}
+"HELLO WORLD"
+[HELLO<hello()>]
+```
+
+`{class{名前{<処理>}}}` は処理を定義します。定義だけでは実行せず、`<名前()>` や `[ボタン<名前()>]` から呼び出します。複数の `<処理>`、処理同士の呼び出しにも対応。名前は英字・`_`・`$`で始め、以降は英数字・`_`・`$`を使用します。重複名・予約語・`changeTo` は定義できません。定義の有効範囲は現在の画面です。
