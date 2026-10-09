@@ -33,7 +33,7 @@ function createTextAssist(input, onStatus) {
       badge.style.left = left+'px'; badge.style.maxWidth = Math.max(24,input.clientWidth-left-4)+'px'; badge.style.top = top+'px'; badge.style.height = height+'px';
       overlay.append(badge);
     }
-    input.setAttribute('aria-invalid', String(errors.length > 0));
+    input.setAttribute('aria-invalid', String(errors.some(error => Number.isInteger(error.line) && error.line > 0)));
   }
   function hide() { popup.hidden = true; current = null; input.removeAttribute('aria-activedescendant'); input.setAttribute('aria-expanded','false'); }
   function placePopup() {

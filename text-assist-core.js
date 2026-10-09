@@ -1,4 +1,7 @@
 function textDiagnostics(source) {
+  if (typeof parseTextMode !== 'function' || typeof compileTextMode !== 'function' || typeof textModeDocument !== 'function') {
+    return [{line:null, system:true, message:'実行機能を読み込めていません。「実行 / 最初から」で再読み込みできます。'}];
+  }
   const errors = [];
   let nodes;
   try { nodes = parseTextMode(source, textCommandGuide.map(row => row[1])); }

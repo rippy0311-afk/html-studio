@@ -19,3 +19,10 @@ assert.equal(context.textDiagnostics('<setVar("time",0)>\n<every(1,()=>{\n print
 const {program,lineMap} = context.compileTextMode(context.parseTextMode('"x"\n{class{hello{\n<missing()>\n}}}\n[RUN<hello()>]'));
 assert.equal(lineMap[program.split('\n').findIndex(s=>s==='missing()')+1],3);
 console.log('PASS command/class/variable/boolean predictions, quoted/comment context, existing parentheses, multiline syntax errors and source line mapping');
+const unloaded = vm.createContext({});
+vm.runInContext(fs.readFileSync(path.join(__dirname,'..','text-assist-core.js'),'utf8'),unloaded);
+const unavailable = unloaded.textDiagnostics('<setVar("time", 0)>')[0];
+assert.equal(unavailable.system,true);
+assert.equal(unavailable.line,null);
+assert.doesNotMatch(unavailable.message,/not defined/);
+console.log('PASS missing runtime is a system-loading issue, not a source-line error');

@@ -24,10 +24,46 @@
   const assist = createTextAssist(input, error => { $('textIssue').textContent = error ? (error.line ? '行 ' + error.line + '：' : '') + error.message : ''; });
   const hint = document.createElement('span'); hint.className = 'text-assist-hint'; hint.textContent = '行末にエラー表示 · ↑↓で候補選択 · Tab / Enterで挿入 · Escで閉じる';
   panel.querySelector('label[for="textSource"]').append(hint);
-  let timer, token = '', lastSource, editing = false;
+  let timer, token = '', lastSource, editing = false, runRevision = 0, runtimePromise = null;
+  const runtimeReady = () => typeof parseTextMode === 'function' && typeof compileTextMode === 'function' && typeof textModeDocument === 'function';
+  function runtimeControls() {
+    for (const id of ['preview','export']) $(id).disabled = state.mode === 'text' && !runtimeReady();
+  }
+  function recoverRuntime() {
+    if (runtimeReady()) return Promise.resolve();
+    if (runtimePromise) return runtimePromise;
+    // Function declarations in text-mode.js can be safely loaded again. A fresh
+    // URL avoids reusing a failed or incomplete cached response.
+    runtimePromise = new Promise((resolve,reject) => {
+      const script = document.createElement('script');
+      script.src = new URL('text-mode.js?v=runtime-recovery-1&retry=' + Date.now(), location.href).href;
+      const finish = error => {
+        clearTimeout(timeout); script.onload = script.onerror = null;
+        if (error) { script.remove(); reject(error); } else resolve();
+      };
+      const timeout = setTimeout(() => finish(new Error('runtime timeout')),10000);
+      script.onload = () => finish(runtimeReady() ? null : new Error('runtime incomplete'));
+      script.onerror = () => finish(new Error('runtime load failed'));
+      document.head.append(script);
+    }).finally(() => { runtimePromise = null; runtimeControls(); });
+    return runtimePromise;
+  }
   function run() {
     clearTimeout(timer);
+    const revision = ++runRevision;
     if (state.mode !== 'text') return;
+    runtimeControls();
+    if (!runtimeReady()) {
+      token = '';
+      $('textLive').srcdoc = '';
+      assist.runtime({message:'実行機能を再読み込みしています…'});
+      recoverRuntime().then(() => {
+        if (revision === runRevision && state.mode === 'text') run();
+      }).catch(() => {
+        if (revision === runRevision && state.mode === 'text') assist.runtime({message:'実行機能を読み込めませんでした。通信を確認して「実行 / 最初から」で再試行してください。入力コードは保持されています。'});
+      });
+      return;
+    }
     token = crypto.randomUUID();
     $('textIssue').textContent = '';
     log.textContent = ''; log.hidden = true;
@@ -51,11 +87,12 @@
     selector.value = active ? 'text' : 'layout';
     layout.hidden = active;
     panel.hidden = !active;
+    runtimeControls();
     if (active) {
       input.value = state.textSource || '';
       if (lastSource !== input.value) run();
       lastSource = input.value;
-    } else { clearTimeout(timer); assist.hide(); $('textLive').srcdoc = ''; lastSource = undefined; }
+    } else { runRevision++; clearTimeout(timer); assist.hide(); $('textLive').srcdoc = ''; lastSource = undefined; }
   };
   selector.onchange = () => {
     checkpoint();
@@ -69,6 +106,7 @@
     state.textSource = input.value;
     lastSource = input.value;
     clearTimeout(timer);
+    runRevision++;
     token = '';
     if (event.isComposing) return;
     timer = setTimeout(run, 650);
@@ -101,7 +139,7 @@
     for (const row of $('textCommandList').children) row.hidden = !(row.textContent + row.dataset.search).toLowerCase().includes(query);
   };
   $('textRun').onclick = run;
-  $('textStop').onclick = () => { clearTimeout(timer); token = ''; $('textLive').srcdoc = ''; $('textIssue').textContent = '停止中'; };
+  $('textStop').onclick = () => { runRevision++; clearTimeout(timer); token = ''; $('textLive').srcdoc = ''; assist.runtime({message:'停止中'}); };
   $('textSave').onclick = () => $('save').click();
   $('textLoad').onclick = () => $('load').click();
   render();
