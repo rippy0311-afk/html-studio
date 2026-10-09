@@ -13,6 +13,13 @@
   <div class="text-columns"><section class="text-writing"><label for="textSource">ソース</label><textarea id="textSource" spellcheck="false" aria-describedby="textHelp" placeholder='"表示する文字"'></textarea><p id="textIssue" role="status"></p></section><section class="text-preview"><b>プレビュー</b><iframe id="textLive" title="テキストモードのプレビュー" sandbox="allow-scripts"></iframe></section></div>
   <details id="textHelp" open><summary>書き方</summary><p><code>"文字"</code> → テキスト　 <code>[HELLO]</code> → ボタン　 <code>&lt;スクリプト&gt;</code> → JavaScript</p><p><code>[HELLO&lt;changeTo('\"こんにちは\"')&gt;]</code> → 押すと画面全体を「こんにちは」に切り替えます。<code>changeTo("")</code> は画面を空にします。</p><p><code>{class{hello{&lt;changeTo('\"こんにちは\"')&gt;}}}</code> で処理を定義し、<code>[HELLO&lt;hello()&gt;]</code> で呼び出せます。定義しただけでは実行されません。</p><p>切り替え先にも同じ記法を使います。改行はそのまま表示。文字中の引用符は <code>\\"</code>、改行は <code>\\n</code>。ボタン内のスクリプトはクリック時、それ以外は画面表示時に実行します。比較演算の &gt; は括弧内で使ってください。</p></details>`;
   layout.after(panel);
+  const reference = document.createElement('details');
+  reference.id = 'textCommands';
+  reference.innerHTML = '<summary>使える命令（' + textCommandGuide.length + '種類）</summary><p>命令名・説明で検索できます。「末尾に追加」で例を挿入します。通常の文字は text1、text2…、ボタンは button1、button2… のIDで操作できます。自分で作る部品には自由なIDを指定します。</p><input id="textCommandSearch" type="search" placeholder="命令を検索（例：タイマー、入力、色）" aria-label="テキスト命令を検索"><div id="textCommandList"></div><p>変数・入力・定義・タイマーは現在の画面内で有効です。changeTo / back / restart でリセットされます。これらの命令に加え、JavaScriptの if / for / 配列なども使えます。</p>';
+  panel.append(reference);
+  const log = document.createElement('pre');
+  log.id = 'textLog'; log.hidden = true; log.setAttribute('aria-label', 'テキストモードの実行ログ');
+  panel.querySelector('.text-preview').append(log);
   const input = $('textSource');
   let timer, token = '', lastSource, editing = false;
   function run() {
@@ -20,8 +27,9 @@
     if (state.mode !== 'text') return;
     token = crypto.randomUUID();
     $('textIssue').textContent = '';
+    log.textContent = ''; log.hidden = true;
     try {
-      const nodes = parseTextMode(state.textSource || '');
+      const nodes = parseTextMode(state.textSource || '', textCommandGuide.map(row => row[1]));
       for (const node of nodes) {
         for (const script of node.type === 'script' ? [node] : node.scripts || []) {
           try { acorn.parse(script.code, {ecmaVersion:'latest', allowReturnOutsideFunction:true}); }
@@ -57,7 +65,7 @@
     state.mode = selector.value;
     if (state.mode === 'text' && typeof state.textSource !== 'string') state.textSource = sample;
     editing = false;
-    render();
+    select(null);
   };
   input.addEventListener('input', () => {
     if (!editing) { checkpoint(); editing = true; }
@@ -73,8 +81,25 @@
   });
   window.addEventListener('message', event => {
     if (event.source !== $('textLive').contentWindow || !event.data?.studioText || event.data.token !== token) return;
+    if (event.data.type === 'log') { log.hidden = false; log.textContent = (log.textContent + event.data.message + '\n').slice(-10000); return; }
     $('textIssue').textContent = (event.data.line ? '行 ' + event.data.line + '：' : '') + event.data.message;
   });
+  for (const [group, name, signature, description, example] of textCommandGuide) {
+    const row = document.createElement('div'); row.className = 'text-command-row';
+    row.dataset.search = group === '時間' ? 'タイマー 待機' : '';
+    const label = document.createElement('small'), code = document.createElement('code'), text = document.createElement('p'), button = document.createElement('button');
+    label.textContent = group; code.textContent = signature; text.textContent = description; button.textContent = '末尾に追加'; button.setAttribute('aria-label', name + ' の例を末尾に追加');
+    button.onclick = () => {
+      editing = false;
+      input.value += (input.value.endsWith('\n') || !input.value ? '' : '\n') + '<' + example + '>\n';
+      input.dispatchEvent(new Event('input', {bubbles:true})); input.focus(); input.setSelectionRange(input.value.length, input.value.length); input.scrollTop = input.scrollHeight;
+    };
+    row.append(label, code, button, text); $('textCommandList').append(row);
+  }
+  $('textCommandSearch').oninput = () => {
+    const query = $('textCommandSearch').value.toLowerCase().trim();
+    for (const row of $('textCommandList').children) row.hidden = !(row.textContent + row.dataset.search).toLowerCase().includes(query);
+  };
   $('textRun').onclick = run;
   $('textStop').onclick = () => { clearTimeout(timer); token = ''; $('textLive').srcdoc = ''; $('textIssue').textContent = '停止中'; };
   $('textSave').onclick = () => $('save').click();

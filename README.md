@@ -92,3 +92,44 @@ Docs: https://supabase.com/docs/guides/auth/auth-smtp and https://supabase.com/d
 ```
 
 `{class{名前{<処理>}}}` は処理を定義します。定義だけでは実行せず、`<名前()>` や `[ボタン<名前()>]` から呼び出します。複数の `<処理>`、処理同士の呼び出しにも対応。名前は英字・`_`・`$`で始め、以降は英数字・`_`・`$`を使用します。重複名・予約語・`changeTo` は定義できません。定義の有効範囲は現在の画面です。
+
+### テキストモードの命令一覧（66種類）
+
+「使える命令」を開くと、命令名や日本語の説明で検索し、使用例をソース末尾に追加できます。公開版と書き出したHTMLで同じ命令が動作します。
+
+| 系統 | 命令 |
+|---|---|
+| 画面 | changeTo, restart, back, clear, title |
+| 文字 | print, println, newline, setText, appendText |
+| 部品・入力 | button, input, getInput, setInput, onInput, onClick, remove, hide, show, toggle, enable, disable, focus |
+| 見た目 | color, background, fontSize, align, bold, border |
+| 変数 | setVar, getVar, addVar, toggleVar, hasVar, removeVar |
+| 制御 | when, repeat, stop |
+| 時間 | after, every, cancel, now |
+| キー操作 | onKey, offKey |
+| 計算 | random, randomInt, choose, clamp, round, floor, ceil, abs, min, max |
+| 文字列 | length, upper, lower, trim, includes, replace, split, join |
+| 型変換 | number, string |
+| 確認 | log, assert |
+
+```text
+"入力してみよう"
+<
+input("name", "名前");
+newline();
+print("未入力", "message");
+onInput("name", value => setText("message", "こんにちは、" + value));
+setVar("score", 0);
+newline();
+print(0, "scoreLabel");
+button("plus", "+1", () => setText("scoreLabel", addVar("score")));
+>
+```
+
+- `"文字"` は上から `text1`, `text2`、`[ボタン]` は `button1`, `button2` のIDで操作できます。`print`, `button`, `input` で作る部品は自分でIDを指定します。
+- `print`・`println` は表示した部品のIDを返します。ID省略時は自動生成。同じIDへの呼び出しは既存の同種部品を更新します。`setText`は入力欄以外を更新し、入力欄は`setInput`を使います。
+- `onInput`にはユーザー入力の最新文字列を渡します。`setInput`はコールバックを呼ばずに値を変更します。存在しない入力欄の`getInput`は空文字列を返します。
+- `after`・`every`の時間は秒。戻り値を`cancel`に渡して解除します。`repeat`は0から始まる番号をコールバックに渡します。タイマー中の無限ループも停止対象です。
+- `clear`は表示部品とそのクリック・入力処理を消しますが、変数、定義、キー操作、タイマーは残します。`changeTo`・`back`・`restart`は画面を作り直すため、実行時の変数・入力値・定義・タイマーをリセットします。ソースの保存は従来のプロジェクト保存で行います。
+- `stop`は表示を残してスクリプトを停止します。`log`はプレビューのログに表示します。
+- JavaScriptの`if`・`for`・配列・アロー関数も使えます。`>`の比較演算は括弧内に記述してください。`{class{名前{...}}}`には組み込み命令と重複しない名前を使います。

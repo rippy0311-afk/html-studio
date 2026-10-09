@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const context = vm.createContext({});
-vm.runInContext(fs.readFileSync(require('node:path').join(__dirname, '../text-mode.js'), 'utf8'), context);
+for (const file of ['text-commands.js', 'text-mode.js']) vm.runInContext(fs.readFileSync(require('node:path').join(__dirname, '../' + file), 'utf8'), context);
 const parse = source => JSON.parse(JSON.stringify(context.parseTextMode(source)));
 assert.deepEqual(parse('[HELLO<changeTo("")>]'), [{type:'button', text:'HELLO', scripts:[{code:'changeTo("")',line:1}]}]);
 assert.equal(parse('"<b>literal</b> \\"quoted\\"\\nnext"')[0].text, '<b>literal</b> "quoted"\nnext');
